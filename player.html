@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VideoEnabler</title>
+  <link rel="icon" href="./assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./css/style.css">
+  <!-- Video.js – bundled locally, no CDN, no WebSockets -->
+  <link rel="stylesheet" href="./vendor/video-js.min.css">
+</head>
+<body class="player-page">
+
+  <!-- HEADER -->
+  <header class="header">
+    <a class="header-logo" href="./index.html">
+      <img src="./assets/logo.svg" alt="Logo" width="28" height="28">
+      <span>Video<span class="logo-yt">Enabler</span></span>
+    </a>
+    <form class="search-form" id="search-form" role="search">
+      <input
+        type="search"
+        class="search-input"
+        id="search-input"
+        placeholder="Hľadať videá..."
+        autocomplete="off"
+        aria-label="Hľadať videá"
+      >
+      <button type="submit" class="search-btn" aria-label="Hľadať">&#128269;</button>
+    </form>
+  </header>
+
+  <!-- PAGE WRAPPER -->
+  <div class="page-wrapper">
+    <div class="content">
+
+      <!-- PLAYER MAIN -->
+      <section class="player-main">
+        <div class="player-wrap" id="player-wrap">
+          <video
+            id="video-player"
+            class="video-js vjs-big-play-centered"
+            controls
+            preload="metadata"
+          ></video>
+        </div>
+
+        <h1 class="player-title" id="video-title"></h1>
+        <div class="player-meta" id="video-meta"></div>
+        <div class="player-desc" id="video-desc" style="display:none"></div>
+      </section>
+
+      <!-- PLAYER SIDEBAR -->
+      <aside class="player-sidebar">
+        <div class="player-sidebar-title">Ďalšie videá</div>
+        <div id="sidebar-list"></div>
+      </aside>
+
+    </div>
+  </div>
+
+  <script src="./videos.js"></script>
+  <script src="./js/catalog.js"></script>
+  <script src="./vendor/video.min.js"></script>
+  <script src="./js/player-init.js"></script>
+
+  <script>
+    // Search redirects back to index with query
+    document.getElementById('search-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var q = document.getElementById('search-input').value.trim();
+      if (q) window.location.href = './index.html?q=' + encodeURIComponent(q);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VideoEnabler</title>
+  <link rel="icon" href="./assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <a class="header-logo" href="./index.html">
+      <img src="./assets/logo.svg" alt="Logo" width="28" height="28">
+      <span>Video<span class="logo-yt">Enabler</span></span>
+    </a>
+    <form class="search-form" id="search-form" role="search">
+      <input
+        type="search"
+        class="search-input"
+        id="search-input"
+        placeholder="Hľadať videá..."
+        autocomplete="off"
+        aria-label="Hľadať videá"
+      >
+      <button type="submit" class="search-btn" aria-label="Hľadať">&#128269;</button>
+    </form>
+  </header>
+
+  <!-- PAGE WRAPPER -->
+  <div class="page-wrapper">
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar" id="sidebar" aria-label="Kategórie">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Knižnica</div>
+        <div class="sidebar-item active" data-category="all" id="cat-all">
+          <span class="icon">🏠</span> Všetky videá
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Kategórie</div>
+        <div id="category-list"></div>
+      </div>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <main class="content">
+      <div class="section-title" id="section-title">Všetky videá</div>
+      <div class="video-grid" id="video-grid"></div>
+    </main>
+
+  </div>
+
+  <script src="./videos.js"></script>
+  <script src="./js/catalog.js"></script>
+  <script>
+    (function () {
+      var currentCategory = 'all';
+      var currentQuery = '';
+
+      function render() {
+        var grid = document.getElementById('video-grid');
+        grid.innerHTML = '';
+
+        var results;
+        if (currentQuery) {
+          results = searchVideos(currentQuery);
+          if (currentCategory !== 'all') {
+            results = results.filter(function (v) { return v.category === currentCategory; });
+          }
+        } else {
+          results = getVideosByCategory(currentCategory);
+        }
+
+        if (results.length === 0) {
+          var empty = document.createElement('div');
+          empty.className = 'empty-state';
+          empty.innerHTML = '<p>Žiadne videá sa nenašli.</p><span>Skúste iný výraz alebo kategóriu.</span>';
+          grid.appendChild(empty);
+          return;
+        }
+
+        results.forEach(function (v) {
+          grid.appendChild(createVideoCard(v));
+        });
+      }
+
+      function buildCategoryList() {
+        var list = document.getElementById('category-list');
+        var cats = getCategories();
+        cats.forEach(function (cat) {
+          var item = document.createElement('div');
+          item.className = 'sidebar-item';
+          item.dataset.category = cat;
+          item.innerHTML = '<span class="icon">📁</span> ' + cat.charAt(0).toUpperCase() + cat.slice(1);
+          item.addEventListener('click', function () { selectCategory(cat, item); });
+          list.appendChild(item);
+        });
+      }
+
+      function selectCategory(cat, el) {
+        currentCategory = cat;
+        document.querySelectorAll('.sidebar-item').forEach(function (i) { i.classList.remove('active'); });
+        el.classList.add('active');
+        var title = document.getElementById('section-title');
+        title.textContent = cat === 'all' ? 'Všetky videá' : cat.charAt(0).toUpperCase() + cat.slice(1);
+        render();
+      }
+
+      // Sidebar: "All" click
+      document.getElementById('cat-all').addEventListener('click', function () {
+        selectCategory('all', this);
+      });
+
+      // Search
+      var searchInput = document.getElementById('search-input');
+      searchInput.addEventListener('input', function () {
+        currentQuery = this.value.trim();
+        render();
+      });
+      document.getElementById('search-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+      });
+
+      buildCategoryList();
+      render();
+    })();
+  </script>
+</body>
+</html>
