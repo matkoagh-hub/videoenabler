@@ -6,6 +6,4 @@ services:
     ports:
       - "8080:80"        # Change 8080 to any free port on your NAS
     restart: unless-stopped
-    volumes:
-      # Mount videos.js from host → edit it and just refresh browser, no rebuild needed
-      - ./videos.js:/usr/share/nginx/html/videos.js:ro
+    # History is stored in browser localStorage — no server-side files needed

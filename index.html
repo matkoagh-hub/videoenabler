@@ -5,128 +5,262 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VideoEnabler</title>
   <link rel="icon" href="./assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./vendor/video-js.min.css">
   <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
 
-  <!-- HEADER -->
   <header class="header">
-    <a class="header-logo" href="./index.html">
+    <div class="header-logo">
       <img src="./assets/logo.svg" alt="Logo" width="28" height="28">
-      <span>Video<span class="logo-yt">Enabler</span></span>
-    </a>
-    <form class="search-form" id="search-form" role="search">
-      <input
-        type="search"
-        class="search-input"
-        id="search-input"
-        placeholder="Hľadať videá..."
-        autocomplete="off"
-        aria-label="Hľadať videá"
-      >
-      <button type="submit" class="search-btn" aria-label="Hľadať">&#128269;</button>
-    </form>
+      <span>Video<span class="accent">Enabler</span></span>
+    </div>
   </header>
 
-  <!-- PAGE WRAPPER -->
-  <div class="page-wrapper">
+  <main class="main-content">
 
-    <!-- SIDEBAR -->
-    <nav class="sidebar" id="sidebar" aria-label="Kategórie">
-      <div class="sidebar-section">
-        <div class="sidebar-label">Knižnica</div>
-        <div class="sidebar-item active" data-category="all" id="cat-all">
-          <span class="icon">🏠</span> Všetky videá
+    <!-- URL Input Section -->
+    <section class="url-section">
+      <div class="url-card">
+        <h1 class="url-heading">Prehrať video z URL</h1>
+        <p class="url-subheading">Vlož priamy odkaz na video (MP4, HLS .m3u8, WebM) — funguje cez firemný firewall bez YouTube</p>
+        <div class="url-form">
+          <input
+            type="url"
+            id="url-input"
+            class="url-input"
+            placeholder="https://example.com/video.mp4  alebo  https://cdn.example.com/stream.m3u8"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          >
+          <div class="url-form-row">
+            <input
+              type="text"
+              id="title-input"
+              class="title-input"
+              placeholder="Názov videa (nepovinné)"
+              autocomplete="off"
+            >
+            <button id="play-btn" class="play-btn">&#9654; Prehrať</button>
+          </div>
+        </div>
+        <div class="url-tips">
+          <span class="tip">MP4</span>
+          <span class="tip">HLS .m3u8</span>
+          <span class="tip">WebM</span>
+          <span class="tip tip-info">&#9432; Žiadne WebSockety — iba HTTPS požiadavky</span>
         </div>
       </div>
-      <div class="sidebar-section">
-        <div class="sidebar-label">Kategórie</div>
-        <div id="category-list"></div>
+    </section>
+
+    <!-- Player Section (hidden until first play) -->
+    <section class="player-section" id="player-section" hidden>
+      <div class="player-wrap">
+        <video
+          id="video-player"
+          class="video-js vjs-default-skin"
+          controls
+          preload="metadata"
+        ></video>
       </div>
-    </nav>
+      <div class="player-info">
+        <h2 class="player-title" id="player-title"></h2>
+        <p class="player-url" id="player-url-display"></p>
+      </div>
+    </section>
 
-    <!-- MAIN CONTENT -->
-    <main class="content">
-      <div class="section-title" id="section-title">Všetky videá</div>
-      <div class="video-grid" id="video-grid"></div>
-    </main>
+    <!-- History Section -->
+    <section class="history-section">
+      <div class="history-header">
+        <h3 class="history-heading">Nedávno prehrané</h3>
+        <button id="clear-history-btn" class="clear-btn" hidden>Vymazať históriu</button>
+      </div>
+      <div id="history-list" class="history-list">
+        <p class="empty-msg">Zatiaľ žiadne videá. Vlož URL vyššie a stlač Prehrať.</p>
+      </div>
+    </section>
 
-  </div>
+  </main>
 
-  <script src="./videos.js"></script>
-  <script src="./js/catalog.js"></script>
+  <script src="./vendor/video.min.js"></script>
   <script>
-    (function () {
-      var currentCategory = 'all';
-      var currentQuery = '';
+  (function () {
+    'use strict';
 
-      function render() {
-        var grid = document.getElementById('video-grid');
-        grid.innerHTML = '';
+    var HISTORY_KEY = 've_history';
+    var MAX_HISTORY = 30;
+    var player = null;
 
-        var results;
-        if (currentQuery) {
-          results = searchVideos(currentQuery);
-          if (currentCategory !== 'all') {
-            results = results.filter(function (v) { return v.category === currentCategory; });
+    // ── Format detection ─────────────────────────────────────────
+    function detectType(url) {
+      var u = (url || '').toLowerCase().split('?')[0];
+      if (u.indexOf('.m3u8') !== -1) return 'application/x-mpegURL';
+      if (u.indexOf('.webm') !== -1) return 'video/webm';
+      if (u.indexOf('.ogv') !== -1 || u.indexOf('.ogg') !== -1) return 'video/ogg';
+      return 'video/mp4';
+    }
+
+    // ── localStorage history ──────────────────────────────────────
+    function getHistory() {
+      try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+      catch (e) { return []; }
+    }
+
+    function saveToHistory(url, title) {
+      var hist = getHistory().filter(function (h) { return h.url !== url; });
+      hist.unshift({ url: url, title: title || '', ts: Date.now() });
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(hist.slice(0, MAX_HISTORY))); }
+      catch (e) {}
+    }
+
+    function removeFromHistory(url) {
+      var hist = getHistory().filter(function (h) { return h.url !== url; });
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(hist)); }
+      catch (e) {}
+      renderHistory();
+    }
+
+    function clearHistory() {
+      try { localStorage.removeItem(HISTORY_KEY); }
+      catch (e) {}
+      renderHistory();
+    }
+
+    // ── Player ────────────────────────────────────────────────────
+    function playVideo(url, title) {
+      url = (url || '').trim();
+      title = (title || '').trim();
+      if (!url) return;
+
+      var section = document.getElementById('player-section');
+      section.hidden = false;
+      document.getElementById('player-title').textContent = title || 'Prehrávanie videa';
+      document.getElementById('player-url-display').textContent = url;
+
+      if (!player) {
+        player = videojs('video-player', {
+          controls: true,
+          autoplay: true,
+          preload: 'auto',
+          fluid: true,
+          playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
+          html5: {
+            vhs: {
+              // Pure XHR/fetch only — no WebSockets, no low-latency mode
+              // Works behind corporate firewalls that block WS
+              enableLowInitialPlaylist: false,
+              useNetworkInformationApi: false,
+              overrideNative: true
+            }
           }
-        } else {
-          results = getVideosByCategory(currentCategory);
-        }
-
-        if (results.length === 0) {
-          var empty = document.createElement('div');
-          empty.className = 'empty-state';
-          empty.innerHTML = '<p>Žiadne videá sa nenašli.</p><span>Skúste iný výraz alebo kategóriu.</span>';
-          grid.appendChild(empty);
-          return;
-        }
-
-        results.forEach(function (v) {
-          grid.appendChild(createVideoCard(v));
+        });
+        player.on('error', function () {
+          var e = player.error();
+          console.warn('VideoEnabler error:', e && e.message);
         });
       }
 
-      function buildCategoryList() {
-        var list = document.getElementById('category-list');
-        var cats = getCategories();
-        cats.forEach(function (cat) {
-          var item = document.createElement('div');
-          item.className = 'sidebar-item';
-          item.dataset.category = cat;
-          item.innerHTML = '<span class="icon">📁</span> ' + cat.charAt(0).toUpperCase() + cat.slice(1);
-          item.addEventListener('click', function () { selectCategory(cat, item); });
-          list.appendChild(item);
+      player.src({ src: url, type: detectType(url) });
+      player.load();
+      player.play().catch(function () {});
+
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      saveToHistory(url, title);
+      renderHistory();
+    }
+
+    // ── History rendering ─────────────────────────────────────────
+    function formatAge(ts) {
+      var diff = Date.now() - ts;
+      var m = Math.floor(diff / 60000);
+      if (m < 1) return 'Práve teraz';
+      if (m < 60) return 'pred ' + m + ' min';
+      var h = Math.floor(m / 60);
+      if (h < 24) return 'pred ' + h + ' hod';
+      return 'pred ' + Math.floor(h / 24) + ' dňom';
+    }
+
+    function esc(str) {
+      return String(str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function truncate(str, max) {
+      return str.length > max ? str.slice(0, max - 1) + '…' : str;
+    }
+
+    function renderHistory() {
+      var hist = getHistory();
+      var list = document.getElementById('history-list');
+      var clearBtn = document.getElementById('clear-history-btn');
+
+      if (hist.length === 0) {
+        list.innerHTML = '<p class="empty-msg">Zatiaľ žiadne videá. Vlož URL vyššie a stlač Prehrať.</p>';
+        clearBtn.hidden = true;
+        return;
+      }
+
+      clearBtn.hidden = false;
+      list.innerHTML = '';
+
+      hist.forEach(function (item) {
+        var card = document.createElement('div');
+        card.className = 'history-card';
+        card.innerHTML =
+          '<div class="hcard-icon">&#9654;</div>' +
+          '<div class="hcard-info">' +
+            '<div class="hcard-title">' + esc(item.title || 'Bez názvu') + '</div>' +
+            '<div class="hcard-url">' + esc(truncate(item.url, 70)) + '</div>' +
+            '<div class="hcard-time">' + formatAge(item.ts) + '</div>' +
+          '</div>' +
+          '<div class="hcard-actions">' +
+            '<button class="hcard-play" title="Prehrať">&#9654;</button>' +
+            '<button class="hcard-del" title="Odstrániť">&#215;</button>' +
+          '</div>';
+
+        function doPlay(e) {
+          if (e) e.stopPropagation();
+          document.getElementById('url-input').value = item.url;
+          document.getElementById('title-input').value = item.title || '';
+          playVideo(item.url, item.title);
+        }
+
+        card.addEventListener('click', doPlay);
+        card.querySelector('.hcard-play').addEventListener('click', doPlay);
+        card.querySelector('.hcard-del').addEventListener('click', function (e) {
+          e.stopPropagation();
+          removeFromHistory(item.url);
         });
+
+        list.appendChild(card);
+      });
+    }
+
+    // ── Event wiring ──────────────────────────────────────────────
+    document.getElementById('play-btn').addEventListener('click', function () {
+      playVideo(
+        document.getElementById('url-input').value,
+        document.getElementById('title-input').value
+      );
+    });
+
+    document.getElementById('url-input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        playVideo(this.value, document.getElementById('title-input').value);
       }
+    });
 
-      function selectCategory(cat, el) {
-        currentCategory = cat;
-        document.querySelectorAll('.sidebar-item').forEach(function (i) { i.classList.remove('active'); });
-        el.classList.add('active');
-        var title = document.getElementById('section-title');
-        title.textContent = cat === 'all' ? 'Všetky videá' : cat.charAt(0).toUpperCase() + cat.slice(1);
-        render();
-      }
+    document.getElementById('clear-history-btn').addEventListener('click', function () {
+      if (confirm('Vymazať celú históriu prehrávaných videí?')) clearHistory();
+    });
 
-      // Sidebar: "All" click
-      document.getElementById('cat-all').addEventListener('click', function () {
-        selectCategory('all', this);
-      });
+    // ── Init ──────────────────────────────────────────────────────
+    renderHistory();
 
-      // Search
-      var searchInput = document.getElementById('search-input');
-      searchInput.addEventListener('input', function () {
-        currentQuery = this.value.trim();
-        render();
-      });
-      document.getElementById('search-form').addEventListener('submit', function (e) {
-        e.preventDefault();
-      });
-
-      buildCategoryList();
-      render();
-    })();
+  })();
   </script>
 </body>
 </html>
